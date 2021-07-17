@@ -18,4 +18,9 @@ public class JavaToken {
 	public String getValue() {
 		return value;
 	}
+	@Override
+	public String toString() {
+		// This makes debugging sooo much easier
+		return value;
+	}
 }

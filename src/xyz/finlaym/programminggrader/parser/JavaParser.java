@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class JavaParser {
@@ -18,6 +19,7 @@ public class JavaParser {
 		
 		int last = 0;
 		int line = 1;
+		int bCount = 0;
 		for(int i = 0; i < data.length(); i++) {
 			char c = data.charAt(i);
 			if(c == '\n')
@@ -26,7 +28,8 @@ public class JavaParser {
 				String s = data.substring(last, i).trim();
 				
 				if(c == '{') {
-					if(currClass == null) {
+					bCount++;
+					if(currClass == null && bCount == 1) {
 						String[] split = s.split(" ");
 						List<JavaModifier> modifiers = new ArrayList<JavaModifier>();
 						String name = null;
@@ -49,7 +52,7 @@ public class JavaParser {
 							return null;
 						}
 						currClass = new JavaClass(name, line, modifiers);
-					}else {
+					}else if (currMethod == null && bCount == 2){
 						String[] split = s.split(" ");
 						List<JavaModifier> modifiers = new ArrayList<JavaModifier>();
 						String name = null;
@@ -96,18 +99,128 @@ public class JavaParser {
 						String value = s.substring(7);
 						JavaImport tmpImport = new JavaImport(value, line);
 						imports.add(tmpImport);
+					}else {
+						// This is an instruction line;
+						
+						if(s.contains("=")) {
+							String opS = "\\=";
+							if(s.contains("+=")) {
+								opS = "\\+\\=";
+							}else if(s.contains("-=")) {
+								opS = "\\-\\=";
+							}else if(s.contains("*=")) {
+								opS = "\\*\\=";
+							} else if(s.contains("/=")) {
+								opS = "/\\=";
+							} else if(s.contains("|=")) {
+								opS = "\\|\\=";
+							} else if(s.contains("&=")) {
+								opS = "\\&\\=";
+							} else if(s.contains("^=")) {
+								opS = "\\^\\=";
+							}
+							// A variable is being set
+							// Type foo = bar()
+							// Alternatively
+							// foo = bar()
+							String[] split = s.split(opS,2);
+							String[] lSplit = split[0].trim().split(" ",2);
+							int nameIndex = 0;
+							List<JavaToken> tokens = new ArrayList<JavaToken>();
+							JavaToken operation = new JavaToken(JavaTokenType.OPERATION, line, opS.replaceAll("\\\\", ""));
+							tokens.add(operation);
+							if(lSplit.length > 1) {
+								JavaToken vType = new JavaToken(JavaTokenType.VARIABLE,line,lSplit[0]);
+								nameIndex = 1;
+								tokens.add(vType);
+							}
+							JavaToken name = new JavaToken(JavaTokenType.NAME,line,lSplit[nameIndex]);
+							tokens.add(name);
+							JavaToken value = new JavaToken(JavaTokenType.DATA,line,split[1].trim());
+							tokens.add(value);
+							JavaInstruction instruction = new JavaInstruction(JavaInstructionType.VARIABLE, tokens, line);
+							if(currMethod != null) {
+								currMethod.getInstructions().add(instruction);
+							}else if(currClass == null) {
+								System.err.println("Error: Instruction outside of class on line "+line);
+								return null;
+							}
+						}else {
+							// A function is being called (probably but not a totally safe assumption)
+							if(s.contains("(")) {
+								String[] split = s.split("\\(",2);
+								JavaToken method = new JavaToken(JavaTokenType.METHOD,line,split[0].trim());
+								String dataS = split[1];
+								dataS = dataS.substring(0, dataS.lastIndexOf(")")).trim();
+								JavaToken mData = new JavaToken(JavaTokenType.DATA,line,dataS);
+								JavaInstruction instruction = new JavaInstruction(JavaInstructionType.CALL, Arrays.asList(method, mData), line);
+								if(currMethod != null) {
+									currMethod.getInstructions().add(instruction);
+								}else if(currClass == null) {
+									System.err.println("Error: Instruction outside of class on line "+line);
+									return null;
+								}
+							}else if(s.equals("continue") || s.equals("break")) {
+								JavaToken flow = new JavaToken(JavaTokenType.FLOW,line,s);
+								JavaInstruction instruction = new JavaInstruction(JavaInstructionType.FLOW, Arrays.asList(flow), line);
+								if(currMethod != null) {
+									currMethod.getInstructions().add(instruction);
+								}else if(currClass == null) {
+									System.err.println("Error: Instruction outside of class on line "+line);
+									return null;
+								}
+							}else if(s.startsWith("return ")) {
+								String[] split = s.split(" ",2);
+								List<JavaToken> tokens = new ArrayList<JavaToken>();
+								JavaToken flow = new JavaToken(JavaTokenType.FLOW,line,split[0]);
+								tokens.add(flow);
+								if(split.length > 1) {
+									JavaToken value = new JavaToken(JavaTokenType.DATA, line, split[1].trim());
+									tokens.add(value);
+								}
+								JavaInstruction instruction = new JavaInstruction(JavaInstructionType.FLOW, tokens, line);
+								if(currMethod != null) {
+									currMethod.getInstructions().add(instruction);
+								}else if(currClass == null) {
+									System.err.println("Error: Instruction outside of class on line "+line);
+									return null;
+								}
+							}else if(s.contains("++") || s.contains("--")) {
+								List<JavaToken> tokens = new ArrayList<JavaToken>();
+								String name = s;
+								if(s.startsWith("++") || s.startsWith("--")) {
+									name = name.substring(2);
+									tokens.add(new JavaToken(JavaTokenType.BEFORE_OPERATION, line, s.substring(0, 2)));
+								}
+								if(s.endsWith("++") || s.endsWith("--")) {
+									name = name.substring(0, name.length()-2);
+									tokens.add(new JavaToken(JavaTokenType.AFTER_OPERATION, line, s.substring(s.length()-2,s.length())));
+								}
+								tokens.add(new JavaToken(JavaTokenType.NAME, line, name));
+								JavaInstruction instruction = new JavaInstruction(JavaInstructionType.OPERATION, tokens, line);
+								if(currMethod != null) {
+									currMethod.getInstructions().add(instruction);
+								}else if(currClass == null) {
+									System.err.println("Error: Instruction outside of class on line "+line);
+									return null;
+								}
+							}else {
+								System.err.println("Found unknown data on line "+line);
+							}
+						}
 					}
 				}
 				
 				last = i+1;
 			}else if(c == '}') {
-				if(currMethod != null) {
+				if(currMethod != null && bCount == 2) {
 					currClass.getMethods().add(currMethod);
 					currMethod = null;
-				}else {
+				}else if(bCount == 1){
 					classes.add(currClass);
 					currClass = null;
 				}
+				bCount--;
 				last = i+1;
 			}
 		}

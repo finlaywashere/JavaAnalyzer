@@ -14,7 +14,7 @@ public class Main {
 
 	public static void main(String[] args) throws Exception{
 		JavaParser parser = new JavaParser();
-		JavaFile file = parser.parse(new File("tests/Test.java"));
+		JavaFile file = parser.parse(new File("tests/BigTest.java"));
 		if(file == null) {
 			System.err.println("Error occurred while processing file!");
 			System.exit(1);

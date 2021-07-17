@@ -20,4 +20,14 @@ public class JavaInstruction {
 	public int getLine() {
 		return line;
 	}
+	@Override
+	public String toString() {
+		String ret = "";
+		for(JavaToken t : tokens) {
+			ret += ", "+t.toString();
+		}
+		if(ret.length() > 0)
+			ret = ret.substring(2);
+		return ret;
+	}
 }

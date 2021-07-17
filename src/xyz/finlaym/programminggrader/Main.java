@@ -2,6 +2,8 @@ package xyz.finlaym.programminggrader;
 
 import java.io.File;
 
+import xyz.finlaym.programminggrader.analyzer.AnalysisResult;
+import xyz.finlaym.programminggrader.analyzer.JavaAnalyzer;
 import xyz.finlaym.programminggrader.parser.JavaArgument;
 import xyz.finlaym.programminggrader.parser.JavaClass;
 import xyz.finlaym.programminggrader.parser.JavaFile;
@@ -14,11 +16,13 @@ public class Main {
 
 	public static void main(String[] args) throws Exception{
 		JavaParser parser = new JavaParser();
-		JavaFile file = parser.parse(new File("tests/BigTest.java"));
+		JavaFile file = parser.parse("test123.test1234.Class1", new File("tests/"));
 		if(file == null) {
 			System.err.println("Error occurred while processing file!");
 			System.exit(1);
 		}
+		JavaAnalyzer analyzer = new JavaAnalyzer();
+		AnalysisResult result = analyzer.analyze(file);
 		for(JavaImport i : file.getImports()) {
 			System.out.println("Import: "+i.getValue());
 		}

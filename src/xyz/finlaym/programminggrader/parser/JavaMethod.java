@@ -46,4 +46,8 @@ public class JavaMethod {
 	public JavaToken getReturnType() {
 		return returnType;
 	}
+	@Override
+	public String toString() {
+		return name;
+	}
 }

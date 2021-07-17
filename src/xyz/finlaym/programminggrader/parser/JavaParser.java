@@ -8,10 +8,17 @@ import java.util.Arrays;
 import java.util.List;
 
 public class JavaParser {
-	public JavaFile parse(File f) throws IOException {
+	public JavaFile parse(String cl, File baseFolder) throws IOException {
+		if(cl.startsWith(".")) {
+			System.err.println("Error refusing to parse unsafe class "+cl);
+			return null;
+		}
+		File f = new File(baseFolder,cl.replaceAll("\\.", "/")+".java");
+		
 		String data = new String(Files.readAllBytes(f.toPath()));
 		
 		List<JavaImport> imports = new ArrayList<JavaImport>();
+		imports.add(new JavaImport("java.lang.*", 0));
 		List<JavaClass> classes = new ArrayList<JavaClass>();
 		
 		JavaClass currClass = null;
@@ -63,15 +70,22 @@ public class JavaParser {
 							try {
 								modifier = JavaModifier.valueOf(split[i1].toUpperCase());
 							}catch(IllegalArgumentException e) {
-								returnType = new JavaToken(JavaTokenType.VARIABLE, line, split[i1]);
+								String ret = split[i1].split("\\(")[0].trim();
+								returnType = new JavaToken(JavaTokenType.VARIABLE, line, ret);
 								String s1 = "";
 								for(int i2 = i1 + 1; i2 < split.length; i2++) {
 									s1 += split[i2] + " ";
 								}
 								s1 = s1.trim();
 								String[] split2 = s1.split("\\(",2);
-								name = split2[0];
-								arguments = split2[1].substring(0, split2[1].lastIndexOf(")"));
+								if(split2.length == 1 && split2[0].equals("")) {
+									// This is a constructor
+									name = ret;
+									arguments = "";
+								}else {
+									name = split2[0];
+									arguments = split2[1].substring(0, split2[1].lastIndexOf(")"));
+								}
 								break;
 							}
 							modifiers.add(modifier);
@@ -81,12 +95,14 @@ public class JavaParser {
 							return null;
 						}
 						List<JavaArgument> args = new ArrayList<JavaArgument>();
-						for(String s1 : arguments.split(",")) {
-							s1 = s1.trim();
-							String[] split2 = s1.split(" ",2);
-							JavaToken type = new JavaToken(JavaTokenType.VARIABLE, line, split2[0]);
-							JavaToken value = new JavaToken(JavaTokenType.NAME, line, split2[1]);
-							args.add(new JavaArgument(type,value));
+						if(!arguments.equals("")) {
+							for(String s1 : arguments.split(",")) {
+								s1 = s1.trim();
+								String[] split2 = s1.split(" ",2);
+								JavaToken type = new JavaToken(JavaTokenType.VARIABLE, line, split2[0]);
+								JavaToken value = new JavaToken(JavaTokenType.NAME, line, split2[1]);
+								args.add(new JavaArgument(type,value));
+							}
 						}
 						currMethod = new JavaMethod(name, line, modifiers,args,returnType);
 					}
@@ -97,8 +113,16 @@ public class JavaParser {
 							return null;
 						}
 						String value = s.substring(7);
-						JavaImport tmpImport = new JavaImport(value, line);
-						imports.add(tmpImport);
+						// Now actually parse that class if it exists
+						File importFile = new File(baseFolder,value.replaceAll("\\.", "/")+".java");
+						if(importFile.exists()) {
+							JavaFile jFile = parse(value, baseFolder);
+							imports.addAll(jFile.getImports());
+							classes.addAll(jFile.getClasses());
+						}else {
+							JavaImport tmpImport = new JavaImport(value, line);
+							imports.add(tmpImport);
+						}
 					}else {
 						// This is an instruction line;
 						

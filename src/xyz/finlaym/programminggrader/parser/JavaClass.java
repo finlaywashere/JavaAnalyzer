@@ -35,4 +35,8 @@ public class JavaClass {
 	public List<JavaModifier> getModifiers() {
 		return modifiers;
 	}
+	@Override
+	public String toString() {
+		return name;
+	}
 }

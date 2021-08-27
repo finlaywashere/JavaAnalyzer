@@ -4,5 +4,6 @@ public enum JavaInstructionType {
 	VARIABLE,
 	CALL,
 	OPERATION,
+	DEFINITION,
 	FLOW;
 }

@@ -24,6 +24,12 @@ public class JavaParser {
 		JavaClass currClass = null;
 		JavaMethod currMethod = null;
 		
+		List<JavaInstruction> classData = new ArrayList<JavaInstruction>();
+		
+		JavaToken pkgDN = new JavaToken(JavaTokenType.MODIFIER, 0, "package");
+		JavaToken pkgDV = new JavaToken(JavaTokenType.DATA,0,"");
+		JavaInstruction pkgInst = new JavaInstruction(JavaInstructionType.DEFINITION, Arrays.asList(pkgDN, pkgDV), 0);
+		
 		int last = 0;
 		int line = 1;
 		int bCount = 0;
@@ -43,6 +49,7 @@ public class JavaParser {
 						for(int i1 = 0; i1 < split.length; i1++) {
 							if(split[i1].toUpperCase().equals("CLASS")) {
 								name = split[i1 + 1];
+								classData.add(pkgInst);
 								break;
 							}
 							JavaModifier modifier;
@@ -58,7 +65,7 @@ public class JavaParser {
 							System.err.println("Illegal class name on line "+line);
 							return null;
 						}
-						currClass = new JavaClass(name, line, modifiers);
+						currClass = new JavaClass(name, line, modifiers,classData);
 					}else if (currMethod == null && bCount == 2){
 						String[] split = s.split(" ");
 						List<JavaModifier> modifiers = new ArrayList<JavaModifier>();
@@ -148,29 +155,42 @@ public class JavaParser {
 							// Alternatively
 							// foo = bar()
 							String[] split = s.split(opS,2);
-							String[] lSplit = split[0].trim().split(" ",2);
-							int nameIndex = 0;
+							String[] lSplit = split[0].trim().split(" ");
+							int typeIndex = 0;
 							List<JavaToken> tokens = new ArrayList<JavaToken>();
-							JavaToken operation = new JavaToken(JavaTokenType.OPERATION, line, opS.replaceAll("\\\\", ""));
-							tokens.add(operation);
-							if(lSplit.length > 1) {
-								JavaToken vType = new JavaToken(JavaTokenType.VARIABLE,line,lSplit[0]);
-								nameIndex = 1;
+							for(int i2 = 0; i2 < lSplit.length; i2++) {
+								String s1 = lSplit[i2];
+								try {
+									JavaModifier modifier = JavaModifier.valueOf(s1.toUpperCase());
+									JavaToken token = new JavaToken(JavaTokenType.MODIFIER, line, modifier.toString());
+									tokens.add(token);
+								}catch(IllegalArgumentException e) {
+									typeIndex = i2;
+									break;
+								}
+							}
+							if(lSplit.length - typeIndex > 1) {
+								JavaToken vType = new JavaToken(JavaTokenType.VARIABLE,line,lSplit[typeIndex]);
+								typeIndex++;
 								tokens.add(vType);
 							}
-							JavaToken name = new JavaToken(JavaTokenType.NAME,line,lSplit[nameIndex]);
+							JavaToken name = new JavaToken(JavaTokenType.NAME,line,lSplit[typeIndex]);
 							tokens.add(name);
+							JavaToken operation = new JavaToken(JavaTokenType.OPERATION, line, opS.replaceAll("\\\\", ""));
+							tokens.add(operation);
 							JavaToken value = new JavaToken(JavaTokenType.DATA,line,split[1].trim());
 							tokens.add(value);
 							JavaInstruction instruction = new JavaInstruction(JavaInstructionType.VARIABLE, tokens, line);
 							if(currMethod != null) {
 								currMethod.getInstructions().add(instruction);
-							}else if(currClass == null) {
+							}else if(currClass != null) {
+								classData.add(instruction);
+							}else {
 								System.err.println("Error: Instruction outside of class on line "+line);
 								return null;
 							}
 						}else {
-							// A function is being called (probably but not a totally safe assumption)
+							// A function is being called or a variable is being defined(probably but not a totally safe assumption)
 							if(s.contains("(")) {
 								String[] split = s.split("\\(",2);
 								JavaToken method = new JavaToken(JavaTokenType.METHOD,line,split[0].trim());
@@ -228,8 +248,41 @@ public class JavaParser {
 									System.err.println("Error: Instruction outside of class on line "+line);
 									return null;
 								}
-							}else {
-								System.err.println("Found unknown data on line "+line);
+							}else if(s.startsWith("package")) {
+								JavaToken pkgT = new JavaToken(JavaTokenType.MODIFIER, line, s.substring(0,7));
+								String s2 = s.substring(7).trim();
+								JavaToken dataT = new JavaToken(JavaTokenType.DATA,line,s2);
+								JavaInstruction inst = new JavaInstruction(JavaInstructionType.DEFINITION, Arrays.asList(pkgT, dataT), line);
+								pkgInst = inst;
+							}else{
+								// This is probably a variable definition
+								String[] split = s.split(" ");
+								List<JavaToken> tokens = new ArrayList<JavaToken>();
+								int typeIndex = 0;
+								for(int i2 = 0; i2 < split.length; i2++) {
+									String s1 = split[i2];
+									try {
+										JavaModifier modifier = JavaModifier.valueOf(s1.toUpperCase());
+										JavaToken token = new JavaToken(JavaTokenType.MODIFIER, line, modifier.toString());
+										tokens.add(token);
+									}catch(IllegalArgumentException e) {
+										typeIndex = i2;
+										break;
+									}
+								}
+								JavaToken type = new JavaToken(JavaTokenType.VARIABLE,line,split[typeIndex]);
+								tokens.add(type);
+								JavaToken name = new JavaToken(JavaTokenType.NAME, line, split[typeIndex+1]);
+								tokens.add(name);
+								JavaInstruction instruction = new JavaInstruction(JavaInstructionType.VARIABLE, tokens, line);
+								if(currMethod != null) {
+									currMethod.getInstructions().add(instruction);
+								}else if(currClass != null) {
+									classData.add(instruction);
+								}else {
+									System.err.println("Error: Instruction outside of class on line "+line);
+									return null;
+								}
 							}
 						}
 					}

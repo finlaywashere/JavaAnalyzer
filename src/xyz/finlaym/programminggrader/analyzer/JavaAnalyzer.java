@@ -2,6 +2,8 @@ package xyz.finlaym.programminggrader.analyzer;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import xyz.finlaym.programminggrader.parser.JavaClass;
 import xyz.finlaym.programminggrader.parser.JavaFile;
@@ -86,11 +88,15 @@ public class JavaAnalyzer {
 	}
 	private static int getHazardLevelClass(String search) {
 		for(String hazard : AnalyzerConstants.HAZARD_CLASSES) {
-			if(search.matches(hazard))
+			Pattern p = Pattern.compile(hazard);
+			Matcher m = p.matcher(search);
+			if(m.lookingAt())
 				return 2;
 		}
 		for(String warn : AnalyzerConstants.WARN_CLASSES) {
-			if(search.matches(warn))
+			Pattern p = Pattern.compile(warn);
+			Matcher m = p.matcher(search);
+			if(m.lookingAt())
 				return 1;
 		}
 		return 0;

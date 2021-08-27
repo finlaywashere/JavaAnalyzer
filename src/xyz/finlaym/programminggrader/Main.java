@@ -8,9 +8,13 @@ import xyz.finlaym.programminggrader.parser.JavaArgument;
 import xyz.finlaym.programminggrader.parser.JavaClass;
 import xyz.finlaym.programminggrader.parser.JavaFile;
 import xyz.finlaym.programminggrader.parser.JavaImport;
+import xyz.finlaym.programminggrader.parser.JavaInstruction;
+import xyz.finlaym.programminggrader.parser.JavaInstructionType;
 import xyz.finlaym.programminggrader.parser.JavaMethod;
 import xyz.finlaym.programminggrader.parser.JavaModifier;
 import xyz.finlaym.programminggrader.parser.JavaParser;
+import xyz.finlaym.programminggrader.parser.JavaToken;
+import xyz.finlaym.programminggrader.parser.JavaTokenType;
 
 public class Main {
 
@@ -23,6 +27,8 @@ public class Main {
 		}
 		JavaAnalyzer analyzer = new JavaAnalyzer();
 		AnalysisResult result = analyzer.analyze(file);
+
+		System.out.println();
 		for(JavaImport i : file.getImports()) {
 			System.out.println("Import: "+i.getValue());
 		}
@@ -48,6 +54,24 @@ public class Main {
 				}
 				System.out.println();
 				System.out.println("Returns: "+m.getReturnType().getValue());
+			}
+			System.out.println();
+			System.out.println();
+			for(JavaInstruction i : c.getClassData()) {
+				if(i.getType() == JavaInstructionType.DEFINITION) {
+					continue;
+				}
+				String name = "unknown";
+				String value = "none";
+				for(JavaToken t : i.getTokens()) {
+					if(t.getType() == JavaTokenType.NAME) {
+						name = t.getValue();
+					}else if(t.getType() == JavaTokenType.DATA) {
+						value = t.getValue();
+					}
+				}
+				System.out.println("Data:\nName: "+name+"\nValue: "+value);
+				System.out.println();
 			}
 		}
 	}

@@ -1,6 +1,8 @@
 package xyz.finlaym.programminggrader.analyzer;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -24,6 +26,8 @@ public class JavaAnalyzer {
 				importTranslations.put(name, i.getValue());
 			}
 		}
+		List<JavaHazard> hazards = new ArrayList<JavaHazard>();
+		
 		for(JavaClass c : file.getClasses()) {
 			for(JavaMethod m : c.getMethods()) {
 				for(JavaInstruction i : m.getInstructions()) {
@@ -69,37 +73,114 @@ public class JavaAnalyzer {
 				}
 			}
 		}
+		for(JavaClass c : file.getClasses()) {
+			for(JavaInstruction i : c.getClassData()) {
+				for(JavaToken t : i.getTokens()) {
+					if(t.getType() == JavaTokenType.DATA) {
+						for(JavaToken token : getTokens(t.getValue())) {
+							if(token.getType() == JavaTokenType.DATA) {
+								JavaHazardType hazardLevel = getHazardLevelString(token.getValue());
+								if(hazardLevel != JavaHazardType.NONE) {
+									JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue());
+									hazards.add(hazard);
+								}
+							}else if(token.getType() == JavaTokenType.METHOD) {
+								String cName = token.getValue();
+								if(cName.startsWith("new "))
+									cName = cName.substring(4);
+								JavaHazardType hazardLevel = getHazardLevelClass(cName);
+								if(hazardLevel != JavaHazardType.NONE) {
+									JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue());
+									hazards.add(hazard);
+								}
+							}
+						}
+					}
+				}
+			}
+			for(JavaMethod m : c.getMethods()) {
+				for(JavaInstruction i : m.getInstructions()) {
+					for(JavaToken t : i.getTokens()) {
+						if(t.getType() == JavaTokenType.DATA) {
+							for(JavaToken token : getTokens(t.getValue())) {
+								if(token.getType() == JavaTokenType.DATA) {
+									JavaHazardType hazardLevel = getHazardLevelString(token.getValue());
+									if(hazardLevel != JavaHazardType.NONE) {
+										JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue());
+										hazards.add(hazard);
+									}
+								}else if(token.getType() == JavaTokenType.METHOD) {
+									String cName = token.getValue();
+									if(cName.startsWith("new "))
+										cName = cName.substring(4);
+									// Only check against whole thing because this will only work if its not imported eg
+									// java.io.File instead of File
+									// this is because File requires java.io.File to be imported which will trigger the import translations
+									//TODO: Fix this so that importing something like java.io.* won't bypass this
+									JavaHazardType hazardLevel = getHazardLevelClass(cName);
+									if(hazardLevel != JavaHazardType.NONE) {
+										JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue());
+										hazards.add(hazard);
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 		for(String key : importTranslations.keySet()) {
 			String i = importTranslations.get(key);
 			String search = i+"."+key; // These are constructors
-			int hazardLevel = getHazardLevelClass(search);
-			switch (hazardLevel) {
-			case 1:
-				System.err.println("Warn: Suspicious class \""+search+"\" in use");
-				break;
-			case 2:
-				System.err.println("Hazard: Potentially malicious class \""+search+"\" in use");
-				break;
-			default:
-				break;
+			JavaHazardType hazardLevel = getHazardLevelClass(search);
+			if(hazardLevel != JavaHazardType.NONE) {
+				JavaHazard hazard = new JavaHazard(hazardLevel, search);
+				hazards.add(hazard);
 			}
 		}
-		return null;
+		AnalysisResult result = new AnalysisResult(hazards);
+		return result;
 	}
-	private static int getHazardLevelClass(String search) {
+	private static List<JavaToken> getTokens(String s){
+		List<JavaToken> tokens = new ArrayList<JavaToken>();
+		int lastI = 0;
+		for(int i = 0; i < s.length(); i++) {
+			if(s.toCharArray()[i] == '(') {
+				String s1 = s.substring(lastI, i);
+				tokens.add(new JavaToken(JavaTokenType.METHOD, 0, s1));
+				lastI = i + 1;
+			}else if(s.toCharArray()[i] == ')') {
+				String s1 = s.substring(lastI, i);
+				tokens.add(new JavaToken(JavaTokenType.DATA, 0, s1));
+				lastI = i + 1;
+			}
+		}
+		return tokens;
+	}
+	private static JavaHazardType getHazardLevelClass(String search) {
 		for(String hazard : AnalyzerConstants.HAZARD_CLASSES) {
 			Pattern p = Pattern.compile(hazard);
 			Matcher m = p.matcher(search);
 			if(m.lookingAt())
-				return 2;
+				return JavaHazardType.HAZARD;
 		}
 		for(String warn : AnalyzerConstants.WARN_CLASSES) {
 			Pattern p = Pattern.compile(warn);
 			Matcher m = p.matcher(search);
 			if(m.lookingAt())
-				return 1;
+				return JavaHazardType.WARN;
 		}
-		return 0;
+		return JavaHazardType.NONE;
+	}
+	private static JavaHazardType getHazardLevelString(String search) {
+		search = search.replaceAll("\"", "");
+		for(String hazard : AnalyzerConstants.WARN_STRINGS) {
+			Pattern p = Pattern.compile(hazard);
+			Matcher m = p.matcher(search);
+			if(m.lookingAt())
+				return JavaHazardType.DATA;
+		}
+		return JavaHazardType.NONE;
 	}
 	private static String findImport(JavaFile file, String name) {
 		if(classExists(name))

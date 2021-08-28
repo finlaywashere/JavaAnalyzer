@@ -4,6 +4,7 @@ import java.io.File;
 
 import xyz.finlaym.programminggrader.analyzer.AnalysisResult;
 import xyz.finlaym.programminggrader.analyzer.JavaAnalyzer;
+import xyz.finlaym.programminggrader.analyzer.JavaHazard;
 import xyz.finlaym.programminggrader.parser.JavaArgument;
 import xyz.finlaym.programminggrader.parser.JavaClass;
 import xyz.finlaym.programminggrader.parser.JavaFile;
@@ -74,6 +75,9 @@ public class Main {
 				System.out.println();
 			}
 		}
+		System.out.println("\n!!!ANALYSIS!!!\n");
+		for(JavaHazard hazard : result.getHazards()) {
+			System.out.println("Type: "+hazard.getType()+", Data: "+hazard.getData());
+		}
 	}
-
 }

@@ -1,14 +1,13 @@
 package xyz.finlaym.programminggrader.parser;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 public class JavaParser {
-	public JavaFile parse(String cl, File baseFolder) throws IOException {
+	public JavaFile parse(String cl, File baseFolder) throws Exception {
 		if(cl.startsWith(".")) {
 			System.err.println("Error refusing to parse unsafe class "+cl);
 			return null;

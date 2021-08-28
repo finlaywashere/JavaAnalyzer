@@ -44,7 +44,7 @@ public class JavaAnalyzer {
 										data = data.substring(0, data.lastIndexOf(")"));
 									}
 									if(startsWithNew) {
-										// Only checking for instanciation for now for simplicity
+										// Only checking for instantiation for now for simplicity
 										// I don't want to have to deal with keeping track of variables yet
 										String name = split[0].substring(4).trim();
 										boolean found = false;
@@ -58,7 +58,7 @@ public class JavaAnalyzer {
 											continue;
 										}
 										if(!importTranslations.containsKey(name)) {
-											String importS = findImport(file, name);
+											String importS = findPackage(name,file,c);
 											importTranslations.put(name, importS);
 											if(importS == null) {
 												System.err.println("Failed to parse import on line "+t.getLine());
@@ -88,6 +88,18 @@ public class JavaAnalyzer {
 								String cName = token.getValue();
 								if(cName.startsWith("new "))
 									cName = cName.substring(4);
+								String tmp = findPackage(cName, file, c);
+								if(tmp != null)
+									cName = tmp;
+								else {
+									tmp = findVariableType(cName,c,null,file);
+									if(tmp != null)
+										cName = tmp;
+									else {
+										System.err.println("Error: Failed to find type for data at line "+i.getLine());
+										continue;
+									}
+								}
 								JavaHazardType hazardLevel = getHazardLevelClass(cName);
 								if(hazardLevel != JavaHazardType.NONE) {
 									JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue());
@@ -113,10 +125,18 @@ public class JavaAnalyzer {
 									String cName = token.getValue();
 									if(cName.startsWith("new "))
 										cName = cName.substring(4);
-									// Only check against whole thing because this will only work if its not imported eg
-									// java.io.File instead of File
-									// this is because File requires java.io.File to be imported which will trigger the import translations
-									//TODO: Fix this so that importing something like java.io.* won't bypass this
+									String tmp = findPackage(cName, file, c);
+									if(tmp != null)
+										cName = tmp;
+									else {
+										tmp = findVariableType(cName,c,m,file);
+										if(tmp != null)
+											cName = tmp;
+										else {
+											System.err.println("Error: Failed to find type for data at line "+i.getLine());
+											continue;
+										}
+									}
 									JavaHazardType hazardLevel = getHazardLevelClass(cName);
 									if(hazardLevel != JavaHazardType.NONE) {
 										JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue());
@@ -182,21 +202,97 @@ public class JavaAnalyzer {
 		}
 		return JavaHazardType.NONE;
 	}
-	private static String findImport(JavaFile file, String name) {
-		if(classExists(name))
-			return name;
-		// This can't do recursive package searching yet which is going to be a nightmare
-		// Ex: If you import java.* it won't be able to find java.reflect.Reflect
-		for(JavaImport i : file.getImports()) {
-			String value = i.getValue();
-			if(!value.endsWith("*"))
-				continue;
-			value = value.substring(0, value.length()-2);
-			String imp = value+"."+name;
-			if(classExists(imp))
-				return imp;
+	private static String findVariableType(String c, JavaClass curr, JavaMethod method, JavaFile file) {
+		String name = getFirstDot(c);
+		if(method != null) {
+			String fqn = getFQN(method.getInstructions(), file, name, curr);
+			if(fqn != null)
+				return stripLastDot(fqn);
+		}
+		String fqn = getFQN(curr.getClassData(), file, name, curr);
+		if(fqn != null)
+			return stripLastDot(fqn);
+		return null;
+	}
+	private static String getFQN(List<JavaInstruction> instructions, JavaFile file, String name, JavaClass curr) {
+		for(JavaInstruction inst : instructions) {
+			if(inst.getType() == JavaInstructionType.VARIABLE) {
+				String vName = null;
+				String vType = null;
+				for(JavaToken t : inst.getTokens()) {
+					if(t.getType() == JavaTokenType.NAME) {
+						vName = t.getValue();
+					}else if(t.getType() == JavaTokenType.VARIABLE) {
+						vType = t.getValue();
+					}
+				}
+				if(vName != null && name.equals(vName)) {
+					String fqn = findPackage(vType, file, curr);
+					return fqn;
+				}
+			}
 		}
 		return null;
+	}
+	private static String findPackage(String c, JavaFile f, JavaClass curr) {
+		if(classExists(c))
+			return c+"."+getLastDot(c);
+		String withoutLast = stripLastDot(c);
+		if(classExists(withoutLast))
+			return c;
+		for(JavaClass cl : f.getClasses()) {
+			if(cl.getFQN().equals(c))
+				return c+"."+getLastDot(c);
+			if(cl.getFQN().equals(withoutLast))
+				return c;
+			if(cl.getName().equals(c))
+				return cl.getFQN()+"."+c;
+			if(cl.getName().equals(withoutLast))
+				return cl.getFQN()+"."+c;
+		}
+		// By here the class is definitely not in the format package.class or package.class.method
+		String pkg = curr.getPkg();
+		for(JavaClass cl : f.getClasses()) {
+			if(cl.getPkg().equals(pkg) && cl.getName().equals(c))
+				return cl.getPkg()+"."+c+"."+getLastDot(c);
+			if(cl.getPkg().equals(pkg) && cl.getName().equals(withoutLast))
+				return cl.getPkg()+"."+c;
+		}
+		// By here the class is definitely not in the same package and is in the format of class or class.method
+		for(JavaImport imp : f.getImports()) {
+			String value = imp.getValue();
+			if(!value.endsWith("*")) {
+				String last = getLastDot(value);
+				if(last.equals(c) || last.equals(withoutLast))
+					return value;
+			}else {
+				value = stripLastDot(value);
+				// Search through package like a pleb
+				if(classExists(value+"."+c))
+					return value+"."+c+"."+getLastDot(c);
+				if(classExists(value+"."+withoutLast))
+					return value+"."+c;
+			}
+		}
+		return null; // No clue here
+	}
+	private static String stripLastDot(String s) {
+		String[] split = s.split("\\.");
+		String ret = "";
+		for(int i = 0; i < split.length-1; i++) {
+			ret += "."+split[i];
+		}
+		if(ret.length() > 0)
+			ret = ret.substring(1);
+		return ret;
+	}
+	private static String getLastDot(String s) {
+		String[] split = s.split("\\.");
+		return split[split.length-1];
+	}
+	private static String getFirstDot(String s) {
+		String[] split = s.split("\\.");
+		return split[0];
 	}
 	@SuppressWarnings("unused")
 	private static boolean classExists(String name) {

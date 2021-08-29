@@ -8,7 +8,7 @@ public class Class2 {
 	public Class2() {
 		test2 = 5;
 		new ClassLoader();
-		java.io.File f = new java.io.File(System.getProperty("user.home"));
+		java.io.File f = new java.io.File(System.getProperty( "user.home"));
 		File f2 = new File("test123");
 	}
 	public int getTest2() {

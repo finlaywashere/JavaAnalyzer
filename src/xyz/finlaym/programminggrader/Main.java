@@ -21,7 +21,7 @@ public class Main {
 
 	public static void main(String[] args) throws Exception{
 		JavaParser parser = new JavaParser();
-		JavaFile file = parser.parse("test123.test1234.Class1", new File("tests/"));
+		JavaFile file = parser.parse("DaemonUtils", new File("tests/"));
 		if(file == null) {
 			System.err.println("Error occurred while processing file!");
 			System.exit(1);
@@ -77,7 +77,7 @@ public class Main {
 		}
 		System.out.println("\n!!!ANALYSIS!!!\n");
 		for(JavaHazard hazard : result.getHazards()) {
-			System.out.println("Type: "+hazard.getType()+", Data: "+hazard.getData());
+			System.out.println("Type: "+hazard.getType()+", Data: "+hazard.getData()+", Line: "+hazard.getLine());
 		}
 	}
 }

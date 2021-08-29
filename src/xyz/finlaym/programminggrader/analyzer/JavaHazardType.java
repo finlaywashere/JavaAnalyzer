@@ -4,5 +4,7 @@ public enum JavaHazardType {
 	NONE,
 	WARN,
 	HAZARD,
+	IO,
+	FAIL,
 	DATA;
 }

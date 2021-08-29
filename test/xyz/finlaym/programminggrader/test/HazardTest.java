@@ -3,10 +3,12 @@ package xyz.finlaym.programminggrader.test;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.io.File;
+import java.util.Arrays;
 
 import org.junit.jupiter.api.Test;
 
 import xyz.finlaym.programminggrader.analyzer.AnalysisResult;
+import xyz.finlaym.programminggrader.analyzer.AnalyzerConstants;
 import xyz.finlaym.programminggrader.analyzer.JavaAnalyzer;
 import xyz.finlaym.programminggrader.parser.JavaFile;
 import xyz.finlaym.programminggrader.parser.JavaParser;
@@ -21,7 +23,7 @@ class HazardTest {
 			fail();
 		}
 		JavaAnalyzer analyzer = new JavaAnalyzer();
-		AnalysisResult result = analyzer.analyze(file);
+		AnalysisResult result = analyzer.analyze(file, Arrays.asList(AnalyzerConstants.HAZARDS));
 		assertEquals(result.getHazards().get(0).getData(),"new ClassLoader");
 		assertEquals(result.getHazards().get(1).getData(),"new java.io.File");
 		assertEquals(result.getHazards().get(2).getData(),"System.getProperty");

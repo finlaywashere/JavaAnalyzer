@@ -1,10 +1,14 @@
 package xyz.finlaym.programminggrader;
 
 import java.io.File;
+import java.util.Arrays;
 
 import xyz.finlaym.programminggrader.analyzer.AnalysisResult;
+import xyz.finlaym.programminggrader.analyzer.AnalyzerConstants;
 import xyz.finlaym.programminggrader.analyzer.JavaAnalyzer;
 import xyz.finlaym.programminggrader.analyzer.JavaHazard;
+import xyz.finlaym.programminggrader.grader.GradingResult;
+import xyz.finlaym.programminggrader.grader.JavaGrader;
 import xyz.finlaym.programminggrader.parser.JavaArgument;
 import xyz.finlaym.programminggrader.parser.JavaClass;
 import xyz.finlaym.programminggrader.parser.JavaFile;
@@ -27,9 +31,12 @@ public class Main {
 			System.exit(1);
 		}
 		JavaAnalyzer analyzer = new JavaAnalyzer();
-		AnalysisResult result = analyzer.analyze(file);
+		AnalysisResult result = analyzer.analyze(file, Arrays.asList(AnalyzerConstants.HAZARDS));
+		
+		JavaGrader grader = new JavaGrader();
+		GradingResult gResult = grader.grade(file);
 
-		System.out.println();
+		System.out.println("\n!!!PARSED DATA!!!\n");
 		for(JavaImport i : file.getImports()) {
 			System.out.println("Import: "+i.getValue());
 		}
@@ -79,5 +86,13 @@ public class Main {
 		for(JavaHazard hazard : result.getHazards()) {
 			System.out.println("Type: "+hazard.getType()+", Data: "+hazard.getData()+", Line: "+hazard.getLine());
 		}
+		
+		System.out.println("\n!!!GRADING!!!\n");
+		System.out.println("Capital to letters ratio for classes: "+gResult.getAverageCapPerCC());
+		System.out.println("Capital to letters ratio for methods: "+gResult.getAverageCapPerCM());
+		System.out.println("Capital to letters ratio for variables: "+gResult.getAverageCapPerCV());
+		System.out.println("Average class name length: "+gResult.getAverageNameLenC());
+		System.out.println("Average method name length: "+gResult.getAverageNameLenM());
+		System.out.println("Average variable name length: "+gResult.getAverageNameLenV());
 	}
 }

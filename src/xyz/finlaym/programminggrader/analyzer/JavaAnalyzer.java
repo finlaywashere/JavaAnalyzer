@@ -1,9 +1,7 @@
 package xyz.finlaym.programminggrader.analyzer;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -18,48 +16,53 @@ import xyz.finlaym.programminggrader.parser.JavaToken;
 import xyz.finlaym.programminggrader.parser.JavaTokenType;
 
 public class JavaAnalyzer {
-	public AnalysisResult analyze(JavaFile file) {
-		Map<String, String> importTranslations = new HashMap<String, String>();
-		for (JavaImport i : file.getImports()) {
-			if (!i.getValue().endsWith("*")) {
-				String[] split = i.getValue().split("\\.");
-				String name = split[split.length - 1];
-				importTranslations.put(name, i.getValue());
-			}
-		}
+	public AnalysisResult analyze(JavaFile file, List<JavaHazardEntry> entries) {
 		List<JavaHazard> hazards = new ArrayList<JavaHazard>();
+		List<JavaToken> failedTokens = new ArrayList<JavaToken>();
+		int totalTokens = 0;
 
 		for (JavaClass c : file.getClasses()) {
 			for (JavaInstruction i : c.getClassData()) {
 				for (JavaToken t : i.getTokens()) {
-					hazards.addAll(getHazards(t, file, c, null, i));
+					AnalysisResult r = getHazards(t, file, c, null, i,entries);
+					hazards.addAll(r.getHazards());
+					totalTokens += r.getTotalTokens();
+					failedTokens.addAll(r.getFailedTokens());
 				}
 			}
 			for (JavaMethod m : c.getMethods()) {
 				for (JavaInstruction i : m.getInstructions()) {
 					for (JavaToken t : i.getTokens()) {
-						hazards.addAll(getHazards(t, file, c, m, i));
+						AnalysisResult r = getHazards(t, file, c, m, i,entries);
+						hazards.addAll(r.getHazards());
+						totalTokens += r.getTotalTokens();
+						failedTokens.addAll(r.getFailedTokens());
 					}
 				}
 			}
 		}
 
-		AnalysisResult result = new AnalysisResult(hazards);
+		AnalysisResult result = new AnalysisResult(hazards,totalTokens,failedTokens);
 		return result;
 	}
 
-	private static List<JavaHazard> getHazards(JavaToken t, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i) {
+	private static AnalysisResult getHazards(JavaToken t, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i, List<JavaHazardEntry> entries) {
 		List<JavaHazard> hazards = new ArrayList<JavaHazard>();
+		List<JavaToken> failedTokens = new ArrayList<JavaToken>();
+		int totalTokens = 0;
 		if (t.getType() == JavaTokenType.DATA) {
 			List<JavaToken> tokens = getTokens(t.getValue());
 			for (JavaToken token : tokens) {
+				totalTokens++;
 				if(token.getValue().equals("")) continue;
 				if (token.getType() == JavaTokenType.DATA) {
-					JavaHazardType hazardLevel = getHazardLevelString(token.getValue());
-					if (hazardLevel != JavaHazardType.NONE) {
-						JavaHazard hazard = new JavaHazard(hazardLevel, token.getValue(), t.getLine());
+					JavaHazardEntry hazardLevel = getHazardLevelString(token.getValue(),entries);
+					if (hazardLevel != null && hazardLevel.getType() != JavaHazardEntryType.FAILURE) {
+						JavaHazard hazard = new JavaHazard(hazardLevel.getLevel(), token.getValue(), t.getLine(),hazardLevel);
 						hazards.add(hazard);
 					}
+					if(hazardLevel != null && hazardLevel.getType() == JavaHazardEntryType.FAILURE)
+						failedTokens.add(token);
 				} else if (token.getType() == JavaTokenType.METHOD) {
 					String cName = token.getValue().replaceAll("\\!", "");
 					boolean found = false;
@@ -73,23 +76,28 @@ public class JavaAnalyzer {
 					if(found)
 						continue;
 
-					JavaHazardType hazardLevel = getHazardLevel(cName, file, c, m, i);
-					if (hazardLevel != JavaHazardType.NONE) {
-						hazards.add(new JavaHazard(hazardLevel, token.getValue(), t.getLine()));
+					JavaHazardEntry hazardLevel = getHazardLevel(cName, file, c, m, i,entries);
+					if (hazardLevel != null && hazardLevel.getType() != JavaHazardEntryType.FAILURE) {
+						hazards.add(new JavaHazard(hazardLevel.getLevel(), token.getValue(), t.getLine(),hazardLevel));
 					}
+					if(hazardLevel != null && hazardLevel.getType() == JavaHazardEntryType.FAILURE)
+						failedTokens.add(token);
 				}
 			}
 		} else if (t.getType() == JavaTokenType.METHOD) {
+			totalTokens++;
 			String cName = t.getValue().trim();
-			JavaHazardType hazardLevel = getHazardLevel(cName, file, c, m, i);
-			if (hazardLevel != JavaHazardType.NONE) {
-				hazards.add(new JavaHazard(hazardLevel, t.getValue(), t.getLine()));
+			JavaHazardEntry hazardLevel = getHazardLevel(cName, file, c, m, i,entries);
+			if (hazardLevel != null && hazardLevel.getType() != JavaHazardEntryType.FAILURE) {
+				hazards.add(new JavaHazard(hazardLevel.getLevel(), t.getValue(), t.getLine(),hazardLevel));
 			}
+			if(hazardLevel != null && hazardLevel.getType() == JavaHazardEntryType.FAILURE)
+				failedTokens.add(t);
 		}
-		return hazards;
+		return new AnalysisResult(hazards, totalTokens, failedTokens);
 	}
 
-	private static JavaHazardType getHazardLevel(String cName, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i) {
+	private static JavaHazardEntry getHazardLevel(String cName, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i, List<JavaHazardEntry> entries) {
 		if (cName.startsWith("new "))
 			cName = cName.substring(4);
 		if (i.getType() == JavaInstructionType.FLOW && i.getTokens().get(0).getValue().equals("for"))
@@ -102,11 +110,10 @@ public class JavaAnalyzer {
 			if (tmp != null)
 				cName = tmp;
 			else {
-				System.err.println("Error: Failed to find type for data at line " + i.getLine());
-				return JavaHazardType.NONE;
+				return new JavaHazardEntry(JavaHazardEntryType.FAILURE, null,null,null);
 			}
 		}
-		return getHazardLevelClass(cName);
+		return getHazardLevelClass(cName,entries);
 	}
 
 	private static List<JavaToken> getTokens(String s) { 	
@@ -136,31 +143,27 @@ public class JavaAnalyzer {
 		return tokens;
 	}
 
-	private static JavaHazardType getHazardLevelClass(String search) {
-		for (String hazard : AnalyzerConstants.HAZARD_CLASSES) {
-			Pattern p = Pattern.compile(hazard);
+	private static JavaHazardEntry getHazardLevelClass(String search, List<JavaHazardEntry> entries) {
+		for (JavaHazardEntry e : entries) {
+			if(e.getType() != JavaHazardEntryType.CLASS)
+				continue;
+			Pattern p = Pattern.compile(e.getRegex());
 			Matcher m = p.matcher(search);
 			if (m.lookingAt())
-				return JavaHazardType.HAZARD;
+				return e;
 		}
-		for (String warn : AnalyzerConstants.WARN_CLASSES) {
-			Pattern p = Pattern.compile(warn);
-			Matcher m = p.matcher(search);
-			if (m.lookingAt())
-				return JavaHazardType.WARN;
-		}
-		return JavaHazardType.NONE;
+		return null;
 	}
 
-	private static JavaHazardType getHazardLevelString(String search) {
+	private static JavaHazardEntry getHazardLevelString(String search, List<JavaHazardEntry> entries) {
 		search = search.replaceAll("\"", "").trim();
-		for (String hazard : AnalyzerConstants.WARN_STRINGS) {
-			Pattern p = Pattern.compile(hazard);
+		for (JavaHazardEntry e : entries) {
+			Pattern p = Pattern.compile(e.getRegex());
 			Matcher m = p.matcher(search);
 			if (m.lookingAt())
-				return JavaHazardType.DATA;
+				return e;
 		}
-		return JavaHazardType.NONE;
+		return null;
 	}
 
 	private static String findVariableType(String c, JavaClass curr, JavaMethod method, JavaFile file) {
@@ -195,6 +198,7 @@ public class JavaAnalyzer {
 						vType = t.getValue();
 					}
 				}
+				if(vType == null || vName == null) continue;
 				if(vType.contains("<")) {
 					vType = vType.split("\\<")[0];
 				}

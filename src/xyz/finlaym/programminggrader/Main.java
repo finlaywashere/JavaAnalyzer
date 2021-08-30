@@ -1,7 +1,11 @@
 package xyz.finlaym.programminggrader;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import xyz.finlaym.programminggrader.analyzer.AnalysisResult;
 import xyz.finlaym.programminggrader.analyzer.AnalyzerConstants;
@@ -85,6 +89,28 @@ public class Main {
 		System.out.println("\n!!!ANALYSIS!!!\n");
 		for(JavaHazard hazard : result.getHazards()) {
 			System.out.println("Type: "+hazard.getType()+", Data: "+hazard.getData()+", Line: "+hazard.getLine());
+		}
+		System.out.println("\nVariable Types:\n");
+		Map<String,List<String>> types = new HashMap<String,List<String>>();
+		for(String vName : result.getResult().getVariableTypes().keySet()) {
+			String[] split = vName.split("\\@",2);
+			String index = (split.length == 2 ? split[0] : "");
+			String name = (split.length == 2 ? split[1] : split[0]);
+			List<String> values = types.get(index);
+			if(values == null)
+				values = new ArrayList<String>();
+			values.add(name + ": "+result.getResult().getVariableTypes().get(vName));
+			types.put(index, values);
+		}
+		for(String m : types.keySet()) {
+			if(m.equals(""))
+				System.out.println("Global Variables:\n");
+			else
+				System.out.println("Method: "+m+"\n");
+			for(String s : types.get(m)) {
+				System.out.println(s);
+			}
+			System.out.println();
 		}
 		
 		System.out.println("\n!!!GRADING!!!\n");

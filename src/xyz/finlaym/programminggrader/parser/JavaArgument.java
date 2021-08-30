@@ -15,6 +15,6 @@ public class JavaArgument {
 	}
 	@Override
 	public String toString() {
-		return value.toString();
+		return type.toString() + " " + value.toString();
 	}
 }

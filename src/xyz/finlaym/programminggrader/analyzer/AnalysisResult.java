@@ -8,11 +8,13 @@ public class AnalysisResult {
 	private List<JavaHazard> hazards;
 	private int totalTokens;
 	private List<JavaToken> failedTokens;
+	private AnalyzedFile result;
 
-	public AnalysisResult(List<JavaHazard> hazards, int totalTokens, List<JavaToken> failedTokens) {
+	public AnalysisResult(List<JavaHazard> hazards, int totalTokens, List<JavaToken> failedTokens, AnalyzedFile result) {
 		this.hazards = hazards;
 		this.totalTokens = totalTokens;
 		this.failedTokens = failedTokens;
+		this.result = result;
 	}
 	
 	public List<JavaHazard> getHazards() {
@@ -26,4 +28,9 @@ public class AnalysisResult {
 	public List<JavaToken> getFailedTokens() {
 		return failedTokens;
 	}
+
+	public AnalyzedFile getResult() {
+		return result;
+	}
+	
 }

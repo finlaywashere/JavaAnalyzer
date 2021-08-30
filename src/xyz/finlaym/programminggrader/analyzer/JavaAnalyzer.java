@@ -20,36 +20,61 @@ public class JavaAnalyzer {
 		List<JavaHazard> hazards = new ArrayList<JavaHazard>();
 		List<JavaToken> failedTokens = new ArrayList<JavaToken>();
 		int totalTokens = 0;
+		AnalyzedFile aFile = new AnalyzedFile();
 
 		for (JavaClass c : file.getClasses()) {
 			for (JavaInstruction i : c.getClassData()) {
+				JavaToken name = null;
 				for (JavaToken t : i.getTokens()) {
-					AnalysisResult r = getHazards(t, file, c, null, i,entries);
+					if(t.getType() == JavaTokenType.NAME) {
+						name = t;
+						break;
+					}
+				}
+				for (JavaToken t : i.getTokens()) {
+					AnalysisResult r = getHazards(t, file, c, null, i,entries,name);
 					hazards.addAll(r.getHazards());
 					totalTokens += r.getTotalTokens();
 					failedTokens.addAll(r.getFailedTokens());
+					aFile.addAll(r.getResult());
 				}
 			}
 			for (JavaMethod m : c.getMethods()) {
 				for (JavaInstruction i : m.getInstructions()) {
+					JavaToken name = null;
 					for (JavaToken t : i.getTokens()) {
-						AnalysisResult r = getHazards(t, file, c, m, i,entries);
+						if(t.getType() == JavaTokenType.NAME) {
+							name = t;
+							break;
+						}
+					}
+					for (JavaToken t : i.getTokens()) {
+						AnalysisResult r = getHazards(t, file, c, m, i,entries,name);
 						hazards.addAll(r.getHazards());
 						totalTokens += r.getTotalTokens();
 						failedTokens.addAll(r.getFailedTokens());
+						aFile.addAll(r.getResult());
 					}
+				}
+				for(JavaArgument a : m.getArguments()) {
+					AnalysisResult r = getHazards(a.getType(), file, c, m, null,entries, a.getValue());
+					hazards.addAll(r.getHazards());
+					totalTokens += r.getTotalTokens();
+					failedTokens.addAll(r.getFailedTokens());
+					aFile.addAll(r.getResult());
 				}
 			}
 		}
 
-		AnalysisResult result = new AnalysisResult(hazards,totalTokens,failedTokens);
+		AnalysisResult result = new AnalysisResult(hazards,totalTokens,failedTokens,aFile);
 		return result;
 	}
 
-	private static AnalysisResult getHazards(JavaToken t, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i, List<JavaHazardEntry> entries) {
+	private static AnalysisResult getHazards(JavaToken t, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i, List<JavaHazardEntry> entries, JavaToken extra) {
 		List<JavaHazard> hazards = new ArrayList<JavaHazard>();
 		List<JavaToken> failedTokens = new ArrayList<JavaToken>();
 		int totalTokens = 0;
+		AnalyzedFile aFile = new AnalyzedFile();
 		if (t.getType() == JavaTokenType.DATA) {
 			List<JavaToken> tokens = getTokens(t.getValue());
 			for (JavaToken token : tokens) {
@@ -76,7 +101,10 @@ public class JavaAnalyzer {
 					if(found)
 						continue;
 
-					JavaHazardEntry hazardLevel = getHazardLevel(cName, file, c, m, i,entries);
+					AnalyzedHazard hFile = getHazardLevel(cName, file, c, m, i,entries);
+					if(hFile.getFile() != null)
+						aFile.addAll(hFile.getFile());
+					JavaHazardEntry hazardLevel = hFile.getEntry();
 					if (hazardLevel != null && hazardLevel.getType() != JavaHazardEntryType.FAILURE) {
 						hazards.add(new JavaHazard(hazardLevel.getLevel(), token.getValue(), t.getLine(),hazardLevel));
 					}
@@ -87,33 +115,78 @@ public class JavaAnalyzer {
 		} else if (t.getType() == JavaTokenType.METHOD) {
 			totalTokens++;
 			String cName = t.getValue().trim();
-			JavaHazardEntry hazardLevel = getHazardLevel(cName, file, c, m, i,entries);
+			AnalyzedHazard hFile = getHazardLevel(cName, file, c, m, i,entries);
+			if(hFile.getFile() != null)
+				aFile.addAll(hFile.getFile());
+			JavaHazardEntry hazardLevel = hFile.getEntry();
 			if (hazardLevel != null && hazardLevel.getType() != JavaHazardEntryType.FAILURE) {
 				hazards.add(new JavaHazard(hazardLevel.getLevel(), t.getValue(), t.getLine(),hazardLevel));
 			}
 			if(hazardLevel != null && hazardLevel.getType() == JavaHazardEntryType.FAILURE)
 				failedTokens.add(t);
-		}
-		return new AnalysisResult(hazards, totalTokens, failedTokens);
-	}
-
-	private static JavaHazardEntry getHazardLevel(String cName, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i, List<JavaHazardEntry> entries) {
-		if (cName.startsWith("new "))
-			cName = cName.substring(4);
-		if (i.getType() == JavaInstructionType.FLOW && i.getTokens().get(0).getValue().equals("for"))
-			cName = cName.split(":")[0].split(" ")[0].trim();
-		String tmp = findPackage(cName, file, c);
-		if (tmp != null)
-			cName = stripLastDot(tmp);
-		else {
-			tmp = findVariableType(cName, c, m, file);
-			if (tmp != null)
-				cName = tmp;
-			else {
-				return new JavaHazardEntry(JavaHazardEntryType.FAILURE, null,null,null);
+		} else if(t.getType() == JavaTokenType.VARIABLE) {
+			totalTokens++;
+			String cName = t.getValue().trim();
+			int index1 = cName.indexOf("<");
+			if(index1 == -1)
+				index1 = Integer.MAX_VALUE;
+			int index2 = cName.indexOf("[");
+			if(index2 == -1)
+				index2 = Integer.MAX_VALUE;
+			int max = Math.min(index1,index2);
+			if(max == Integer.MAX_VALUE)
+				max = cName.length();
+			cName = cName.substring(0, max);
+			
+			String vName;
+			if(m != null)
+				vName = m.getName()+"@"+extra.getValue().trim();
+			else
+				vName = extra.getValue().trim();
+			
+			String pkg = findPackage(cName, file, c);
+			if(pkg == null) {
+				failedTokens.add(t);
+			}else {
+				pkg = stripLastDot(pkg);
+				aFile.getVariableTypes().put(vName, pkg);
+				if(m != null)
+					aFile.getVariableDefinitions().put(vName, m.getLine());
+				else
+					aFile.getVariableDefinitions().put(vName, c.getLine());
 			}
 		}
-		return getHazardLevelClass(cName,entries);
+		return new AnalysisResult(hazards, totalTokens, failedTokens, aFile);
+	}
+
+	private static AnalyzedHazard getHazardLevel(String cName, JavaFile file, JavaClass c, JavaMethod m, JavaInstruction i, List<JavaHazardEntry> entries) {
+		if (cName.startsWith("new "))
+			cName = cName.substring(4);
+		if (i != null && i.getType() == JavaInstructionType.FLOW && i.getTokens().get(0).getValue().equals("for"))
+			cName = cName.split(":")[0].split(" ")[0].trim();
+		AnalyzedFile aFile = new AnalyzedFile();
+		String tmp = findPackage(cName, file, c);
+		if (tmp != null) {
+			tmp = stripLastDot(tmp);
+			cName = tmp;
+			aFile.getImports().add(cName);
+		} else {
+			tmp = findVariableType(cName, c, m, file);
+			if (tmp != null) {
+				if(m != null)
+					cName = m.getName()+"@"+stripLastDot(cName);
+				aFile.getVariableTypes().put(cName, tmp);
+				if(i != null)
+					aFile.getVariableDefinitions().put(cName, i.getLine());
+				else
+					aFile.getVariableDefinitions().put(cName, m.getLine());
+				cName = tmp;
+			} else {
+				return new AnalyzedHazard(new JavaHazardEntry(JavaHazardEntryType.FAILURE, null,null,null),null);
+			}
+		}
+		aFile.getImports().add(cName);
+		return new AnalyzedHazard(getHazardLevelClass(cName,entries),aFile);
 	}
 
 	private static List<JavaToken> getTokens(String s) { 	

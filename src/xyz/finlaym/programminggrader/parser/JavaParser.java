@@ -6,6 +6,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+import xyz.finlaym.programminggrader.Utils;
+
 public class JavaParser {
 	public JavaFile parse(String cl, File baseFolder) throws Exception {
 		if (cl.startsWith(".")) {
@@ -130,12 +132,28 @@ public class JavaParser {
 							}
 							modifiers.add(modifier);
 						}
-						if (name == null) {
+						if (name == null && !s.contains("(")) {
+							int num = 0;
+							for(JavaMethod m : currClass.getMethods()) {
+								if(m.getName().startsWith("GLOBAL")) {
+									String s1 = m.getName().substring(6);
+									if(Utils.isInt(s1)) {
+										int i1 = Integer.valueOf(s1);
+										if(i1 > num)
+											num = i1;
+									}
+								}
+							}
+							num++;
+							name = "GLOBAL"+num;
+							arguments = "";
+							returnType = new JavaToken(JavaTokenType.VARIABLE, line, "void");
+						}else if (name == null) {
 							System.err.println("Illegal method name on line " + line);
 							return null;
 						}
 						List<JavaArgument> args = new ArrayList<JavaArgument>();
-						if (!arguments.equals("")) {
+						if (arguments != null && !arguments.equals("")) {
 							for (String s1 : arguments.split(",")) {
 								s1 = s1.trim();
 								String[] split2 = s1.split(" ", 2);

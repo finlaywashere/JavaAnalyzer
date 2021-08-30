@@ -13,7 +13,7 @@ import downloadsCategorizer.common.Utils;
 
 public class DaemonUtils {
 	private static File[] lastFiles = new File[0];
-
+	
 	/**
 	 * Finds all the new files in the downloads folder
 	 * Note: The first time this is run every time the program is restarted it will return all the files in the Downloads folder

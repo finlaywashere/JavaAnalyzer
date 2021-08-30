@@ -25,6 +25,8 @@ public class JavaGrader {
 		int capitalCCharsM = 0;
 		for(JavaClass c : file.getClasses()) {
 			for(JavaMethod m : c.getMethods()) {
+				if(m.getName().startsWith("GLOBAL"))
+					continue;
 				methodCount++;
 				averageNameLenM += m.getName().length();
 				for(char c1 : m.getName().toCharArray()) {

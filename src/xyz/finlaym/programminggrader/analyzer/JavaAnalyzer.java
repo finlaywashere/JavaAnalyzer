@@ -229,9 +229,9 @@ public class JavaAnalyzer {
 	}
 
 	private static JavaHazardEntry getHazardLevelString(String search, List<JavaHazardEntry> entries) {
-		search = search.replaceAll("\"", "").trim();
+		search = search.replaceAll("\"", "").trim().toLowerCase();
 		for (JavaHazardEntry e : entries) {
-			Pattern p = Pattern.compile(e.getRegex());
+			Pattern p = Pattern.compile(e.getRegex().toLowerCase());
 			Matcher m = p.matcher(search);
 			if (m.lookingAt())
 				return e;
